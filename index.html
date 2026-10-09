@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>가위바위보 첫수 시뮬레이터</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap">
+<style>
+  /* Layout: one centered column — controls, three hand cards side by side, convergence chart, opponent mix, then a play-it-yourself panel */
+  :root {
+    --bg: #eef1f5;
+    --surface: #ffffff;
+    --ink: #17202b;
+    --muted: #5b6676;
+    --line: #d5dbe3;
+    --scissors: #0d8587;
+    --rock: #b1611b;
+    --paper: #6a4cc2;
+    --win: #1f8a4c;
+    --draw: #9aa3af;
+    --lose: #c2412d;
+    --font-display: "Black Han Sans", "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #11161d; --surface: #19202a; --ink: #e7ecf2; --muted: #9aa5b4; --line: #2b3542;
+      --scissors: #3cc0c2; --rock: #e39b55; --paper: #a28cf2;
+      --win: #4cc27e; --draw: #6f7a88; --lose: #f0735c;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #11161d; --surface: #19202a; --ink: #e7ecf2; --muted: #9aa5b4; --line: #2b3542;
+    --scissors: #3cc0c2; --rock: #e39b55; --paper: #a28cf2;
+    --win: #4cc27e; --draw: #6f7a88; --lose: #f0735c;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.55;
+    padding-inline: 16px;
+    padding-block: 32px 56px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; display: grid; gap: 28px; }
+
+  header { display: grid; gap: 8px; }
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(30px, 6vw, 46px);
+    line-height: 1.1;
+    margin: 0;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+  h1 .s { color: var(--scissors); } h1 .r { color: var(--rock); } h1 .p { color: var(--paper); }
+  .lede { margin: 0; color: var(--muted); max-width: 62ch; }
+  h2 { font-size: 17px; font-weight: 700; margin: 0; text-wrap: balance; }
+  .eyebrow { font-size: 12px; letter-spacing: 0.08em; color: var(--muted); font-weight: 500; }
+  .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+  /* Controls */
+  .controls {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px;
+    display: grid;
+    gap: 16px;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: end; }
+  .field { display: grid; gap: 6px; min-width: 0; }
+  .field > label, .field > .label { font-size: 13px; color: var(--muted); font-weight: 500; }
+  .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg label {
+    padding: 8px 14px; cursor: pointer; font-size: 14px; color: var(--muted);
+    border-right: 1px solid var(--line); user-select: none;
+  }
+  .seg label:last-of-type { border-right: 0; }
+  .seg input:checked + label { background: var(--ink); color: var(--bg); }
+  .seg input:focus-visible + label { outline: 2px solid var(--paper); outline-offset: -2px; }
+  select {
+    font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--surface); color: var(--ink);
+  }
+  .run {
+    font: inherit; font-weight: 700; padding: 9px 20px; border-radius: 10px; border: 0;
+    background: var(--ink); color: var(--bg); cursor: pointer;
+  }
+  .run:hover { opacity: 0.88; }
+  .run:focus-visible, select:focus-visible, .play button:focus-visible, .reset:focus-visible, input[type=range]:focus-visible {
+    outline: 2px solid var(--paper); outline-offset: 2px;
+  }
+
+  .sliders { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .slider { display: grid; gap: 4px; }
+  .slider .top { display: flex; justify-content: space-between; font-size: 14px; }
+  .slider input { width: 100%; }
+  .slider[data-h="0"] input { accent-color: var(--scissors); }
+  .slider[data-h="1"] input { accent-color: var(--rock); }
+  .slider[data-h="2"] input { accent-color: var(--paper); }
+  .note { font-size: 13px; color: var(--muted); margin: 0; }
+
+  /* Hand cards */
+  .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-top: 4px solid var(--hc);
+    border-radius: 14px;
+    padding: 16px;
+    display: grid;
+    gap: 12px;
+    align-content: start;
+    min-width: 0;
+  }
+  .card[data-h="0"] { --hc: var(--scissors); }
+  .card[data-h="1"] { --hc: var(--rock); }
+  .card[data-h="2"] { --hc: var(--paper); }
+  .card .head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 30px; }
+  .card .name { font-family: var(--font-display); font-size: 22px; color: var(--hc); display: flex; align-items: center; gap: 8px; }
+  .card .name .ic { font-size: 22px; }
+  .chip {
+    font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
+    background: var(--hc); color: var(--surface); white-space: nowrap;
+  }
+  .big { display: grid; gap: 2px; }
+  .big .val { font-family: var(--font-mono); font-size: 36px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .big .sub { font-size: 13px; color: var(--muted); }
+  .bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--line); }
+  .bar span { display: block; height: 100%; transition: width 120ms linear; }
+  .bar .w { background: var(--win); } .bar .d { background: var(--draw); } .bar .l { background: var(--lose); }
+  .wdl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; font-size: 13px; }
+  .wdl div { display: grid; gap: 0; }
+  .wdl .k { color: var(--muted); display: flex; align-items: center; gap: 5px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot.w { background: var(--win); } .dot.d { background: var(--draw); } .dot.l { background: var(--lose); }
+  .theory { font-size: 13px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 10px; display: grid; gap: 2px; }
+  .theory b { color: var(--ink); font-weight: 600; }
+
+  /* Panels */
+  .panel {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px; display: grid; gap: 12px; min-width: 0; align-content: start;
+  }
+  .panel .phead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 16px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); }
+  .legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+  .chart-box { position: relative; width: 100%; height: 280px; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .progress { font-size: 13px; color: var(--muted); }
+
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+  .mix { display: grid; gap: 10px; }
+  .mix .line { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: 14px; }
+  .mix .track { position: relative; height: 18px; background: var(--bg); border-radius: 5px; overflow: hidden; }
+  .mix .fill { position: absolute; inset: 0 auto 0 0; border-radius: 5px; transition: width 120ms linear; }
+  .mix .mark { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--ink); }
+  .mix .vals { text-align: right; font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .mix .vals b { color: var(--ink); font-weight: 600; }
+
+  .play { display: grid; gap: 14px; }
+  .play .btns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .play .btns button {
+    font: inherit; cursor: pointer; padding: 12px 8px; border-radius: 12px;
+    border: 2px solid var(--hc); background: var(--surface); color: var(--hc);
+    font-family: var(--font-display); font-size: 20px; display: grid; justify-items: center; gap: 2px;
+  }
+  .play .btns button .ic { font-size: 30px; }
+  .play .btns button:hover { background: var(--bg); }
+  .play button[data-h="0"] { --hc: var(--scissors); }
+  .play button[data-h="1"] { --hc: var(--rock); }
+  .play button[data-h="2"] { --hc: var(--paper); }
+  .verdict { min-height: 48px; display: flex; align-items: center; gap: 12px; font-size: 16px; flex-wrap: wrap; }
+  .verdict .tag { font-weight: 700; padding: 3px 10px; border-radius: 999px; color: var(--surface); }
+  .tag.w { background: var(--win); } .tag.d { background: var(--draw); } .tag.l { background: var(--lose); }
+  .tally { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .tally th, .tally td { padding: 7px 8px; border-bottom: 1px solid var(--line); text-align: right; }
+  .tally th:first-child, .tally td:first-child { text-align: left; }
+  .tally th { font-weight: 500; color: var(--muted); font-size: 13px; }
+  .reset { font: inherit; font-size: 13px; background: none; border: 0; color: var(--muted); text-decoration: underline; cursor: pointer; padding: 0; }
+
+  footer { font-size: 13px; color: var(--muted); display: grid; gap: 6px; max-width: 70ch; }
+  footer p { margin: 0; }
+
+  @media (max-width: 760px) {
+    .cards, .two { grid-template-columns: minmax(0, 1fr); }
+    .sliders { grid-template-columns: minmax(0, 1fr); }
+    .chart-box { height: 230px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bar span, .mix .fill { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">첫 판에 무엇을 낼까</span>
+    <h1><span class="s">가위</span> <span class="r">바위</span> <span class="p">보</span> 첫수 시뮬레이터</h1>
+    <p class="lede">상대가 어떤 비율로 손을 내는지 정한 뒤, 내가 첫 판에 가위·바위·보를 낼 때 각각 몇 번 이기고 비기고 지는지 수천 번 돌려 봅니다. 승률은 비긴 판을 빼고 계산합니다. 비기면 다시 하는 실제 게임과 같은 기준입니다.</p>
+  </header>
+
+  <section class="controls" aria-label="시뮬레이션 설정">
+    <div class="row">
+      <div class="field">
+        <span class="label" id="mode-label">상대가 내는 손</span>
+        <div class="seg" role="radiogroup" aria-labelledby="mode-label">
+          <input type="radio" name="mode" id="m-human" value="human" checked><label for="m-human">사람 통계</label>
+          <input type="radio" name="mode" id="m-random" value="random"><label for="m-random">완전 무작위</label>
+          <input type="radio" name="mode" id="m-custom" value="custom"><label for="m-custom">직접 설정</label>
+        </div>
+      </div>
+      <div class="field">
+        <label for="games">손마다 판 수</label>
+        <select id="games">
+          <option value="100">100판</option>
+          <option value="1000">1,000판</option>
+          <option value="10000" selected>10,000판</option>
+          <option value="100000">100,000판</option>
+        </select>
+      </div>
+      <button class="run" id="run" type="button">다시 돌리기</button>
+    </div>
+    <div class="sliders" id="sliders"></div>
+    <p class="note" id="mode-note"></p>
+  </section>
+
+  <section class="cards" id="cards" aria-label="첫수별 결과"></section>
+
+  <section class="panel" aria-label="승률 수렴 그래프">
+    <div class="phead">
+      <h2>판이 쌓일수록 승률은 이론값으로 모입니다</h2>
+      <span class="progress num" id="progress"></span>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div class="chart-box" id="chart-box"><canvas id="chart" role="img" aria-label="판 수에 따른 첫수별 승률(비김 제외) 변화"></canvas></div>
+    <p class="note">실선은 시뮬레이션 누적 승률, 점선은 상대 비율로 계산한 이론값입니다.</p>
+  </section>
+
+  <div class="two">
+    <section class="panel" aria-label="상대가 낸 손">
+      <h2>상대가 실제로 낸 손</h2>
+      <div class="mix" id="mix"></div>
+      <p class="note">막대는 시뮬레이션에서 나온 비율, 세로선은 설정한 비율입니다.</p>
+    </section>
+
+    <section class="panel play" aria-label="직접 해보기">
+      <div class="phead">
+        <h2>직접 첫 판 해보기</h2>
+        <button class="reset" id="reset" type="button">기록 지우기</button>
+      </div>
+      <div class="btns" id="btns"></div>
+      <div class="verdict" id="verdict" aria-live="polite"><span class="note">손을 하나 고르면 상대가 위에서 정한 비율대로 냅니다.</span></div>
+      <div style="overflow-x:auto">
+        <table class="tally">
+          <thead><tr><th>내 첫수</th><th>판</th><th>승</th><th>무</th><th>패</th><th>승률</th></tr></thead>
+          <tbody id="tally"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <p>사람 통계는 자주 인용되는 수치(바위 35.4%, 보 35.0%, 가위 29.6%)를 썼습니다. 조사마다 조금씩 다르니 참고용으로 보세요.</p>
+    <p>계산식: 바위를 내면 상대가 가위일 때 이기고 보일 때 집니다. 승률(비김 제외) = 이긴 판 ÷ (이긴 판 + 진 판).</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  const HANDS = [
+    { name: '가위', icon: '✌️', color: '--scissors' },
+    { name: '바위', icon: '✊', color: '--rock' },
+    { name: '보',   icon: '✋', color: '--paper' }
+  ];
+  // index order: 0 가위, 1 바위, 2 보
+  const PRESETS = {
+    human:  [0.296, 0.354, 0.350],
+    random: [1 / 3, 1 / 3, 1 / 3]
+  };
+  const NOTES = {
+    human: '사람들이 첫 판에 내는 경향을 따릅니다. 바위가 가장 많고 가위가 가장 적습니다.',
+    random: '세 손이 정확히 1/3씩 나옵니다. 이론상 어떤 손을 내도 승률은 50%입니다.',
+    custom: '슬라이더를 움직여 상대 성향을 직접 정하세요. 합이 100%가 되도록 자동으로 맞춥니다.'
+  };
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let mode = 'human';
+  let weights = PRESETS.human.map(p => Math.round(p * 1000) / 10);
+  let probs = PRESETS.human.slice();
+  let sim = null;
+  let runId = 0;
+
+  // me beats opp when (me - opp + 3) % 3 === 1
+  const outcome = (me, opp) => me === opp ? 'd' : ((me - opp + 3) % 3 === 1 ? 'w' : 'l');
+  const pct = x => Number.isFinite(x) ? (x * 100).toFixed(1) + '%' : '—';
+  const fmt = n => n.toLocaleString('ko-KR');
+  const sample = () => {
+    const r = Math.random();
+    return r < probs[0] ? 0 : (r < probs[0] + probs[1] ? 1 : 2);
+  };
+  const theory = me => {
+    const w = probs[(me + 2) % 3], l = probs[(me + 1) % 3], d = probs[me];
+    return { w, d, l, rate: w + l > 0 ? w / (w + l) : NaN };
+  };
+  const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+  /* ---------- controls ---------- */
+  const slidersEl = document.getElementById('sliders');
+  slidersEl.innerHTML = HANDS.map((h, i) => `
+    <div class="slider" data-h="${i}">
+      <div class="top"><label for="s${i}">${h.icon} 상대 ${h.name}</label><span class="num" id="sv${i}"></span></div>
+      <input type="range" id="s${i}" min="0" max="100" step="0.1">
+    </div>`).join('');
+
+  function syncSliders() {
+    HANDS.forEach((_, i) => {
+      document.getElementById('s' + i).value = weights[i];
+      document.getElementById('sv' + i).textContent = pct(probs[i]);
+    });
+    document.getElementById('mode-note').textContent = NOTES[mode];
+  }
+
+  function setMode(m) {
+    mode = m;
+    document.getElementById('m-' + m).checked = true;
+    if (PRESETS[m]) {
+      probs = PRESETS[m].slice();
+      weights = probs.map(p => Math.round(p * 1000) / 10);
+    }
+    syncSliders();
+  }
+
+  document.querySelectorAll('input[name="mode"]').forEach(r =>
+    r.addEventListener('change', () => { setMode(r.value); start(); }));
+
+  let sliderTimer = null;
+  HANDS.forEach((_, i) => {
+    document.getElementById('s' + i).addEventListener('input', e => {
+      weights[i] = parseFloat(e.target.value);
+      let total = weights.reduce((a, b) => a + b, 0);
+      if (total <= 0) { weights = [1, 1, 1]; total = 3; }
+      probs = weights.map(w => w / total);
+      mode = 'custom';
+      document.getElementById('m-custom').checked = true;
+      HANDS.forEach((_, j) => document.getElementById('sv' + j).textContent = pct(probs[j]));
+      document.getElementById('mode-note').textContent = NOTES.custom;
+      clearTimeout(sliderTimer);
+      sliderTimer = setTimeout(start, 250);
+    });
+  });
+
+  document.getElementById('games').addEventListener('change', start);
+  document.getElementById('run').addEventListener('click', start);
+
+  /* ---------- cards ---------- */
+  const cardsEl = document.getElementById('cards');
+  cardsEl.innerHTML = HANDS.map((h, i) => `
+    <article class="card" data-h="${i}">
+      <div class="head">
+        <span class="name"><span class="ic" aria-hidden="true">${h.icon}</span>첫수 ${h.name}</span>
+        <span class="chip" id="chip${i}" hidden></span>
+      </div>
+      <div class="big">
+        <span class="val" id="rate${i}">—</span>
+        <span class="sub">승률 (비김 제외)</span>
+      </div>
+      <div class="bar" aria-hidden="true"><span class="w" id="bw${i}"></span><span class="d" id="bd${i}"></span><span class="l" id="bl${i}"></span></div>
+      <div class="wdl">
+        <div><span class="k"><i class="dot w"></i>승</span><span class="num" id="cw${i}">0</span></div>
+        <div><span class="k"><i class="dot d"></i>무</span><span class="num" id="cd${i}">0</span></div>
+        <div><span class="k"><i class="dot l"></i>패</span><span class="num" id="cl${i}">0</span></div>
+      </div>
+      <div class="theory" id="th${i}"></div>
+    </article>`).join('');
+
+  function renderTheory() {
+    const t = HANDS.map((_, i) => theory(i));
+    const rates = t.map(x => x.rate);
+    const best = Math.max(...rates), worst = Math.min(...rates);
+    const flat = best - worst < 1e-9;
+    HANDS.forEach((h, i) => {
+      const beat = HANDS[(i + 2) % 3].name, lose = HANDS[(i + 1) % 3].name;
+      document.getElementById('th' + i).innerHTML =
+        `<span>이론 승률 <b class="num">${pct(t[i].rate)}</b></span>` +
+        `<span>상대 ${beat}면 승 <span class="num">${pct(t[i].w)}</span> · 같은 손이면 무 <span class="num">${pct(t[i].d)}</span> · ${lose}면 패 <span class="num">${pct(t[i].l)}</span></span>`;
+      const chip = document.getElementById('chip' + i);
+      if (!flat && rates[i] === best) { chip.textContent = '가장 유리'; chip.hidden = false; }
+      else if (!flat && rates[i] === worst) { chip.textContent = '가장 불리'; chip.hidden = false; chip.style.background = 'var(--muted)'; }
+      else chip.hidden = true;
+      if (!flat && rates[i] === best) chip.style.background = '';
+    });
+  }
+
+  function renderCards() {
+    HANDS.forEach((_, i) => {
+      const s = sim.stats[i], n = s.w + s.d + s.l || 1;
+      document.getElementById('rate' + i).textContent = pct(s.w + s.l ? s.w / (s.w + s.l) : NaN);
+      document.getElementById('bw' + i).style.width = (s.w / n * 100) + '%';
+      document.getElementById('bd' + i).style.width = (s.d / n * 100) + '%';
+      document.getElementById('bl' + i).style.width = (s.l / n * 100) + '%';
+      document.getElementById('cw' + i).textContent = fmt(s.w) + ' (' + pct(s.w / n) + ')';
+      document.getElementById('cd' + i).textContent = fmt(s.d) + ' (' + pct(s.d / n) + ')';
+      document.getElementById('cl' + i).textContent = fmt(s.l) + ' (' + pct(s.l / n) + ')';
+    });
+    document.getElementById('progress').textContent = `${fmt(sim.played)} / ${fmt(sim.N)}판`;
+  }
+
+  /* ---------- opponent mix ---------- */
+  const mixEl = document.getElementById('mix');
+  mixEl.innerHTML = HANDS.map((h, i) => `
+    <div class="line">
+      <span>${h.icon} ${h.name}</span>
+      <div class="track"><div class="fill" id="mf${i}" style="background:var(${h.color})"></div><div class="mark" id="mm${i}"></div></div>
+      <span class="vals num" id="mv${i}"></span>
+    </div>`).join('');
+
+  function renderMix() {
+    const total = sim.opp.reduce((a, b) => a + b, 0) || 1;
+    HANDS.forEach((_, i) => {
+      const obs = sim.opp[i] / total;
+      document.getElementById('mf' + i).style.width = (obs * 100) + '%';
+      document.getElementById('mm' + i).style.left = `calc(${probs[i] * 100}% - 1px)`;
+      document.getElementById('mv' + i).innerHTML = `<b>${pct(obs)}</b> (설정 ${pct(probs[i])})`;
+    });
+  }
+
+  /* ---------- chart ---------- */
+  const canvas = document.getElementById('chart');
+  const box = document.getElementById('chart-box');
+  document.getElementById('legend').innerHTML = HANDS.map(h =>
+    `<span><i style="background:var(${h.color})"></i>첫수 ${h.name}</span>`).join('');
+
+  function drawChart() {
+    if (!sim) return;
+    const dpr = window.devicePixelRatio || 1;
+    const W = box.clientWidth, H = box.clientHeight;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    const m = { l: 48, r: 14, t: 12, b: 28 };
+    const pw = W - m.l - m.r, ph = H - m.t - m.b;
+    const muted = css('--muted'), line = css('--line'), ink = css('--ink');
+    const font = '12px ' + css('--font-mono');
+
+    // y domain from settled points and theory, always covering 40–60%
+    const th = HANDS.map((_, i) => theory(i).rate);
+    let lo = 0.4, hi = 0.6;
+    th.forEach(v => { if (Number.isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } });
+    const settle = Math.min(50, sim.N / 10);
+    sim.hist.forEach(p => { if (p.n >= settle) p.r.forEach(v => { if (Number.isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }); });
+    const span0 = hi - lo;
+    const step = span0 > 0.45 ? 0.1 : span0 > 0.18 ? 0.05 : 0.02;
+    lo = Math.max(0, Math.floor((lo - 0.01) / step) * step);
+    hi = Math.min(1, Math.ceil((hi + 0.01) / step) * step);
+    const y = v => m.t + ph - (v - lo) / (hi - lo) * ph;
+    const x = n => m.l + (n / sim.N) * pw;
+
+    ctx.font = font; ctx.textBaseline = 'middle';
+    ctx.lineWidth = 1;
+    for (let v = lo; v <= hi + 1e-9; v += step) {
+      const yy = Math.round(y(v)) + 0.5;
+      ctx.strokeStyle = line; ctx.setLineDash(Math.abs(v - 0.5) < 1e-9 ? [] : [2, 4]);
+      ctx.beginPath(); ctx.moveTo(m.l, yy); ctx.lineTo(W - m.r, yy); ctx.stroke();
+      ctx.fillStyle = Math.abs(v - 0.5) < 1e-9 ? ink : muted;
+      ctx.textAlign = 'right';
+      ctx.fillText(Math.round(v * 100) + '%', m.l - 8, yy);
+    }
+    ctx.setLineDash([]);
+    ctx.textBaseline = 'top'; ctx.fillStyle = muted;
+    const xt = pw < 420 ? [0, 0.5, 1] : [0, 0.25, 0.5, 0.75, 1];
+    xt.forEach((f, k) => {
+      const n = Math.round(sim.N * f);
+      ctx.textAlign = k === 0 ? 'left' : k === xt.length - 1 ? 'right' : 'center';
+      ctx.fillText(fmt(n), x(n), H - m.b + 8);
+    });
+
+    ctx.save();
+    ctx.beginPath(); ctx.rect(m.l, m.t, pw, ph); ctx.clip();
+    HANDS.forEach((h, i) => {
+      const c = css(h.color);
+      if (Number.isFinite(th[i])) {
+        ctx.strokeStyle = c; ctx.globalAlpha = 0.55; ctx.lineWidth = 1.5; ctx.setLineDash([5, 5]);
+        ctx.beginPath(); ctx.moveTo(m.l, y(th[i])); ctx.lineTo(W - m.r, y(th[i])); ctx.stroke();
+      }
+      ctx.globalAlpha = 1; ctx.setLineDash([]); ctx.lineWidth = 2.25; ctx.lineJoin = 'round';
+      ctx.beginPath();
+      let started = false, last = null;
+      sim.hist.forEach(p => {
+        const v = p.r[i];
+        if (!Number.isFinite(v)) return;
+        if (!started) { ctx.moveTo(x(p.n), y(v)); started = true; } else ctx.lineTo(x(p.n), y(v));
+        last = [x(p.n), y(v)];
+      });
+      ctx.stroke();
+      if (last) {
+        ctx.fillStyle = c;
+        ctx.beginPath(); ctx.arc(last[0], last[1], 4, 0, Math.PI * 2); ctx.fill();
+      }
+    });
+    ctx.restore();
+  }
+
+  new ResizeObserver(drawChart).observe(box);
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', drawChart);
+  new MutationObserver(drawChart).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  /* ---------- simulation ---------- */
+  function start() {
+    const id = ++runId;
+    const N = parseInt(document.getElementById('games').value, 10);
+    sim = {
+      N, played: 0, opp: [0, 0, 0], hist: [],
+      stats: HANDS.map(() => ({ w: 0, d: 0, l: 0 }))
+    };
+    renderTheory();
+    const frames = reduceMotion ? 1 : 150;
+    const batch = Math.ceil(N / frames);
+    const record = () => sim.hist.push({
+      n: sim.played,
+      r: sim.stats.map(s => s.w + s.l ? s.w / (s.w + s.l) : NaN)
+    });
+    const sub = Math.max(1, Math.ceil(batch / 8));
+    function step() {
+      if (id !== runId) return;
+      const end = Math.min(N, sim.played + batch);
+      while (sim.played < end) {
+        for (let me = 0; me < 3; me++) {
+          const opp = sample();
+          sim.opp[opp]++;
+          sim.stats[me][outcome(me, opp)]++;
+        }
+        sim.played++;
+        if (sim.played % sub === 0 || sim.played === N) record();
+      }
+      renderCards(); renderMix(); drawChart();
+      if (sim.played < N) requestAnimationFrame(step);
+    }
+    step();
+  }
+
+  /* ---------- play it yourself ---------- */
+  const tally = HANDS.map(() => ({ w: 0, d: 0, l: 0 }));
+  document.getElementById('btns').innerHTML = HANDS.map((h, i) =>
+    `<button type="button" data-h="${i}" id="play${i}"><span class="ic" aria-hidden="true">${h.icon}</span>${h.name}</button>`).join('');
+  const LABEL = { w: '이겼어요', d: '비겼어요', l: '졌어요' };
+
+  function renderTally() {
+    document.getElementById('tally').innerHTML = HANDS.map((h, i) => {
+      const t = tally[i], n = t.w + t.d + t.l;
+      return `<tr><td>${h.icon} ${h.name}</td><td class="num">${n}</td><td class="num">${t.w}</td><td class="num">${t.d}</td><td class="num">${t.l}</td><td class="num">${pct(t.w + t.l ? t.w / (t.w + t.l) : NaN)}</td></tr>`;
+    }).join('');
+  }
+  HANDS.forEach((h, i) => document.getElementById('play' + i).addEventListener('click', () => {
+    const opp = sample(), r = outcome(i, opp);
+    tally[i][r]++;
+    document.getElementById('verdict').innerHTML =
+      `<span>나 ${h.icon} ${h.name} vs 상대 ${HANDS[opp].icon} ${HANDS[opp].name}</span><span class="tag ${r}">${LABEL[r]}</span>`;
+    renderTally();
+  }));
+  document.getElementById('reset').addEventListener('click', () => {
+    tally.forEach(t => { t.w = t.d = t.l = 0; });
+    document.getElementById('verdict').innerHTML = '<span class="note">기록을 지웠어요. 손을 하나 골라 보세요.</span>';
+    renderTally();
+  });
+
+  setMode('human');
+  renderTally();
+  start();
+})();
+</script>
+</body>
+</html>

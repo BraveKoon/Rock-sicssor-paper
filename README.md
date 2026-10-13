@@ -1,6 +1,8 @@
 # Rock-sicssor-paper
 
-가위바위보 첫수 시뮬레이터. `index.html`을 브라우저로 열면 됩니다.
+가위바위보 첫수 시뮬레이터. `index.html`을 브라우저로 열거나 GitHub Pages 사이트에서 바로 볼 수 있습니다.
+
+**사이트:** https://bravekoon.github.io/Rock-sicssor-paper/
 
 - 상대가 내는 손의 비율(사람 통계 / 완전 무작위 / 직접 설정)을 고르고
 - 첫 판에 가위·바위·보를 낼 때 각각의 승·무·패와 승률(비김 제외)을 수천 판 시뮬레이션해 이론값과 비교합니다.
@@ -16,3 +18,8 @@ git push origin v1.0.0
 ```
 
 또는 GitHub의 **Actions → Release → Run workflow**에서 버전을 입력해 실행해도 됩니다.
+
+## GitHub Pages 배포
+
+`main`에 push하면 GitHub Actions(`.github/workflows/pages.yml`)가 `index.html`을 GitHub Pages에 배포합니다.
+처음 한 번은 저장소 **Settings → Pages → Build and deployment → Source**를 **GitHub Actions**로 설정해야 합니다.

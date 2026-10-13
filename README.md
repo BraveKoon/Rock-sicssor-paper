@@ -1,5 +1,8 @@
 # Rock-sicssor-paper
 
+[![사이트 열기](https://img.shields.io/badge/%EC%82%AC%EC%9D%B4%ED%8A%B8-%EB%B0%94%EB%A1%9C%20%EC%97%B4%EA%B8%B0-6a4cc2?style=for-the-badge&logo=githubpages&logoColor=white)](https://bravekoon.github.io/Rock-sicssor-paper/)
+[![Deploy to GitHub Pages](https://github.com/BraveKoon/Rock-sicssor-paper/actions/workflows/pages.yml/badge.svg)](https://github.com/BraveKoon/Rock-sicssor-paper/actions/workflows/pages.yml)
+
 가위바위보 첫수 시뮬레이터. `index.html`을 브라우저로 열거나 GitHub Pages 사이트에서 바로 볼 수 있습니다.
 
 **사이트:** https://bravekoon.github.io/Rock-sicssor-paper/

@@ -190,12 +190,22 @@
   .tally th { font-weight: 500; color: var(--muted); font-size: 13px; }
   .reset { font: inherit; font-size: 13px; background: none; border: 0; color: var(--muted); text-decoration: underline; cursor: pointer; padding: 0; }
 
+  /* Second round */
+  .sliders.pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sliders.pair input { accent-color: var(--ink); }
+  .cards4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+  .card[data-s] { --hc: var(--muted); }
+  .card[data-s].best { --hc: var(--ink); }
+  .card .rule { margin: 0; font-size: 13px; color: var(--muted); min-height: 3.1em; }
+  .cycle { font-weight: 600; color: var(--ink); white-space: nowrap; }
+
   footer { font-size: 13px; color: var(--muted); display: grid; gap: 6px; max-width: 70ch; }
   footer p { margin: 0; }
 
   @media (max-width: 760px) {
     .cards, .two { grid-template-columns: minmax(0, 1fr); }
-    .sliders { grid-template-columns: minmax(0, 1fr); }
+    .sliders, .sliders.pair { grid-template-columns: minmax(0, 1fr); }
+    .card .rule { min-height: 0; }
     .chart-box { height: 230px; }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -209,7 +219,7 @@
   <header>
     <span class="eyebrow">첫 판에 무엇을 낼까</span>
     <h1><span class="s">가위</span> <span class="r">바위</span> <span class="p">보</span> 첫수 시뮬레이터</h1>
-    <p class="lede">상대가 어떤 비율로 손을 내는지 정한 뒤, 내가 첫 판에 가위·바위·보를 낼 때 각각 몇 번 이기고 비기고 지는지 수천 번 돌려 봅니다. 승률은 비긴 판을 빼고 계산합니다. 비기면 다시 하는 실제 게임과 같은 기준입니다.</p>
+    <p class="lede">상대가 어떤 비율로 손을 내는지 정한 뒤, 내가 첫 판에 가위·바위·보를 낼 때 각각 몇 번 이기고 비기고 지는지 수천 번 돌려 봅니다. 승률은 비긴 판을 빼고 계산합니다. 비기면 다시 하는 실제 게임과 같은 기준입니다. 아래에서는 첫 판 결과를 보고 두 번째 판을 어떻게 낼지도 비교합니다.</p>
   </header>
 
   <section class="controls" aria-label="시뮬레이션 설정">
@@ -271,6 +281,26 @@
       </div>
     </section>
   </div>
+
+  <section class="panel" aria-label="두 번째 판 전략">
+    <div class="phead">
+      <h2>두 번째 판은 어떻게 낼까</h2>
+      <span class="progress num" id="st-progress"></span>
+    </div>
+    <p class="note">사람은 이긴 손을 다시 내고, 지면 <span class="cycle">바위 → 보 → 가위 → 바위</span> 순서로 다음 손으로 바꾸는 경향이 있다고 알려져 있어요. 상대의 이 경향을 정하면, 첫 판 결과를 보고 두 번째 판을 내는 전략 네 가지를 비교합니다.</p>
+    <div class="sliders pair">
+      <div class="slider">
+        <div class="top"><label for="st-stay">상대가 이긴 뒤 같은 손을 낼 확률</label><span class="num" id="st-stay-v"></span></div>
+        <input type="range" id="st-stay" min="0" max="100" step="1" value="45">
+      </div>
+      <div class="slider">
+        <div class="top"><label for="st-shift">상대가 진 뒤 다음 손으로 바꿀 확률</label><span class="num" id="st-shift-v"></span></div>
+        <input type="range" id="st-shift" min="0" max="100" step="1" value="45">
+      </div>
+    </div>
+    <div class="cards4" id="st-cards"></div>
+    <p class="note">기본값 45%는 예시입니다. 33%면 상대가 경향 없이 무작위로 내는 것과 같습니다. 첫 판은 내가 아무 손이나, 상대는 위에서 정한 비율로 내고, 비기면 승부가 날 때까지 다시 합니다. 판 수는 위에서 고른 값을 씁니다.</p>
+  </section>
 
   <footer>
     <p>사람 통계는 자주 인용되는 수치(바위 35.4%, 보 35.0%, 가위 29.6%)를 썼습니다. 조사마다 조금씩 다르니 참고용으로 보세요.</p>
@@ -521,6 +551,7 @@
 
   /* ---------- simulation ---------- */
   function start() {
+    startStrategy();
     const id = ++runId;
     const N = parseInt(document.getElementById('games').value, 10);
     sim = {
@@ -577,6 +608,106 @@
     document.getElementById('verdict').innerHTML = '<span class="note">기록을 지웠어요. 손을 하나 골라 보세요.</span>';
     renderTally();
   });
+
+  /* ---------- second round ---------- */
+  // next(h) is the hand that beats h, i.e. the next step in 바위 → 보 → 가위 → 바위
+  const next = h => (h + 1) % 3;
+  const prev = h => (h + 2) % 3;
+  const STRATS = [
+    { name: '무작위', rule: '두 번째 판도 아무 손이나 냅니다.', move: () => -1 },
+    { name: '같은 손 유지', rule: '첫 판에 낸 손을 그대로 냅니다.', move: m => m },
+    { name: '사람처럼', rule: '이기면 그대로 내고, 지면 다음 손으로 바꿉니다.', move: (m, won) => won ? m : next(m) },
+    { name: '상대 읽기', rule: '이겼으면 내 손을 이기는 손을, 졌으면 내 손이 이기는 손을 냅니다.', move: (m, won) => won ? next(m) : prev(m) }
+  ];
+  const stayEl = document.getElementById('st-stay');
+  const shiftEl = document.getElementById('st-shift');
+  const sampleFrom = d => {
+    const r = Math.random();
+    return r < d[0] ? 0 : (r < d[0] + d[1] ? 1 : 2);
+  };
+  // Opponent's second throw: a winner repeats with probability stay, a loser moves to the next hand with probability shift
+  function oppSecond(o, oppWon) {
+    const p = (oppWon ? stayEl.value : shiftEl.value) / 100;
+    const target = oppWon ? o : next(o);
+    return [0, 1, 2].map(h => h === target ? p : (1 - p) / 2);
+  }
+  const myDist = mv => mv < 0 ? [1 / 3, 1 / 3, 1 / 3] : [0, 1, 2].map(h => h === mv ? 1 : 0);
+
+  function strategyTheory(si) {
+    const acc = { w: 0, d: 0, l: 0 };
+    let total = 0;
+    for (let m = 0; m < 3; m++) for (let o = 0; o < 3; o++) {
+      const r1 = outcome(m, o);
+      if (r1 === 'd') continue;
+      const p1 = probs[o] / 3;
+      total += p1;
+      const won = r1 === 'w';
+      const mine = myDist(STRATS[si].move(m, won)), theirs = oppSecond(o, !won);
+      for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) acc[outcome(a, b)] += p1 * mine[a] * theirs[b];
+    }
+    const w = acc.w / total, d = acc.d / total, l = acc.l / total;
+    return { w, d, l, rate: w + l > 0 ? w / (w + l) : NaN };
+  }
+
+  document.getElementById('st-cards').innerHTML = STRATS.map((s, i) => `
+    <article class="card" data-s="${i}" id="sc${i}">
+      <div class="head">
+        <span class="name">${s.name}</span>
+        <span class="chip" id="sch${i}" hidden>가장 유리</span>
+      </div>
+      <p class="rule">${s.rule}</p>
+      <div class="big">
+        <span class="val" id="srate${i}">—</span>
+        <span class="sub">두 번째 판 승률 (비김 제외)</span>
+      </div>
+      <div class="bar" aria-hidden="true"><span class="w" id="sbw${i}"></span><span class="d" id="sbd${i}"></span><span class="l" id="sbl${i}"></span></div>
+      <div class="wdl">
+        <div><span class="k"><i class="dot w"></i>승</span><span class="num" id="scw${i}">0</span></div>
+        <div><span class="k"><i class="dot d"></i>무</span><span class="num" id="scd${i}">0</span></div>
+        <div><span class="k"><i class="dot l"></i>패</span><span class="num" id="scl${i}">0</span></div>
+      </div>
+      <div class="theory" id="sth${i}"></div>
+    </article>`).join('');
+
+  function startStrategy() {
+    document.getElementById('st-stay-v').textContent = stayEl.value + '%';
+    document.getElementById('st-shift-v').textContent = shiftEl.value + '%';
+    const N = parseInt(document.getElementById('games').value, 10);
+    const th = STRATS.map((_, i) => strategyTheory(i));
+    const best = Math.max(...th.map(t => t.rate)), worst = Math.min(...th.map(t => t.rate));
+    STRATS.forEach((s, i) => {
+      const st = { w: 0, d: 0, l: 0 };
+      for (let g = 0; g < N; g++) {
+        let m, o, r1;
+        do { m = Math.floor(Math.random() * 3); o = sample(); r1 = outcome(m, o); } while (r1 === 'd');
+        const won = r1 === 'w';
+        const mv = s.move(m, won);
+        const a = mv < 0 ? Math.floor(Math.random() * 3) : mv;
+        st[outcome(a, sampleFrom(oppSecond(o, !won)))]++;
+      }
+      const isBest = best - worst > 1e-9 && th[i].rate === best;
+      document.getElementById('sc' + i).classList.toggle('best', isBest);
+      document.getElementById('sch' + i).hidden = !isBest;
+      document.getElementById('srate' + i).textContent = pct(st.w + st.l ? st.w / (st.w + st.l) : NaN);
+      document.getElementById('sbw' + i).style.width = (st.w / N * 100) + '%';
+      document.getElementById('sbd' + i).style.width = (st.d / N * 100) + '%';
+      document.getElementById('sbl' + i).style.width = (st.l / N * 100) + '%';
+      document.getElementById('scw' + i).textContent = fmt(st.w) + ' (' + pct(st.w / N) + ')';
+      document.getElementById('scd' + i).textContent = fmt(st.d) + ' (' + pct(st.d / N) + ')';
+      document.getElementById('scl' + i).textContent = fmt(st.l) + ' (' + pct(st.l / N) + ')';
+      document.getElementById('sth' + i).innerHTML =
+        `<span>이론 승률 <b class="num">${pct(th[i].rate)}</b></span>` +
+        `<span>승 <span class="num">${pct(th[i].w)}</span> · 무 <span class="num">${pct(th[i].d)}</span> · 패 <span class="num">${pct(th[i].l)}</span></span>`;
+    });
+    document.getElementById('st-progress').textContent = `전략마다 ${fmt(N)}판`;
+  }
+
+  let stTimer = null;
+  [stayEl, shiftEl].forEach(el => el.addEventListener('input', () => {
+    document.getElementById(el.id + '-v').textContent = el.value + '%';
+    clearTimeout(stTimer);
+    stTimer = setTimeout(startStrategy, 200);
+  }));
 
   setMode('human');
   renderTally();
